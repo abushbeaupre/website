@@ -2,11 +2,17 @@
 title: "Extending the causal inference toolkit for ecologists: A visualization method of indirect effects"
 ---
 
+<style>
+body {
+  text-align: justify;
+}
+</style>
+
 Welcome to the webpage dedicated to visualizing indirect effects for a wide scope of use cases in causal and network analyses. Being ecologists, we have focused on applying the visualization method we developed to examples in ecology. The method can however be applied to all fields of research in which indirect effects are of interest.
 
 This is the link towards the preprint of our article describing the method on Biorxiv
 
-<div style="float: right; width: 45%; margin-left: 20px; margin-bottom: 20px;">
+<div style="float: right; width: 45%; margin-left: 20px; margin-bottom: 20px; font-size: 0.8em;">
 ![**Figure 1.(A) Directed acyclic graph of a simulated example of the direct effect of an exposure variable on an outcome variable and its indirect effect through a mediator. (B) Prediction of the direct effect of the exposure on the outcome. (C) Prediction of the direct effect of the exposure on the mediator. (D) Prediction of the direct effect of the mediator on the outcome. (E) Prediction of the indirect effect of the exposure on the outcome superimposed on the prediction of the direct effect of the mediator on the outcome. Predictions generated from Generalized Linear Models.** ](fig_1.png){width=100%}
 </div>
 
