@@ -30,7 +30,7 @@ Much ecological research focuses on how a given variable can affect another eith
 ---
 This is the link towards the preprint of our article describing the method on Biorxiv
 
-This is the link to access and download used in the case study
+This is the link to access and download the data used in the case study
 
 <div style="clear: both;"></div>
 
