@@ -100,7 +100,7 @@ First, we will simulate data from this DAG:
 ```{r}
 #| code-fold: true
 #| warning: false
-#| fig-width: 8
+#| fig-width: 12
 #| fig-height: 5
 # Create DAG with default labels
 DAG_default <- create_dag_plot()
@@ -363,7 +363,7 @@ pO_ME
 
 ```{r}
 #| fig-width: 8
-#| fig-height: 5
+#| fig-height: 8
 # Create right column with B and C stacked
 right_col_top <- pO_E / pM_E
 
