@@ -98,7 +98,7 @@ create_dag_plot <- function(labels = c("Exposure", "Mediator", "Outcome"),
 ## Data
 
 ```{r}
-data_protos <- read_excel("data_indirecteffects.xlsx") %>% 
+data_protos <- read_excel("data_indirecteffects.xlsx") |> 
   # scale the data (except comp1 comp2 as it was already centered between 0)
   mutate( scl_cumulated_chicks = as.vector(scale(cumulated_chicks)),
           scl_a1j1_p = as.vector(scale(a1j1_p)),
@@ -207,8 +207,8 @@ p_hatchdate_nestdays <- predictions(m_host,
                             exclude = c("s(farm)","s(year)")) 
 
 # we obtained predictions, but need to unscale the explanatory variable "timing_clutch" 
-p_hatchdate_nestdays <- p_hatchdate_nestdays %>%  
-  mutate(hatch_date = scl_timing_clutch * sd(data_protos$timing_clutch) + mean(data_protos$timing_clutch)) %>% 
+p_hatchdate_nestdays <- p_hatchdate_nestdays |>  
+  mutate(hatch_date = scl_timing_clutch * sd(data_protos$timing_clutch) + mean(data_protos$timing_clutch)) |> 
   select(-c(year,farm))
 ```
 
@@ -277,8 +277,8 @@ p_hatchdate_protos <- predictions(m_protos, newdata =
                              exclude = c("s(farm)","s(year)")) #population effect prediction
 
 #we got the predictions, but need to unscale the explanatory variable "timing_clutch"
-p_hatchdate_protos <- p_hatchdate_protos %>%  
-  mutate(hatch_date = scl_timing_clutch * sd(data_protos$timing_clutch) + mean(data_protos$timing_clutch)) %>% 
+p_hatchdate_protos <- p_hatchdate_protos |>  
+  mutate(hatch_date = scl_timing_clutch * sd(data_protos$timing_clutch) + mean(data_protos$timing_clutch)) |> 
   select(-c(year,farm))
 ```
 
@@ -324,8 +324,8 @@ p_nestdays_protos <- predictions(m_protos, newdata =
                              datagrid(scl_cumulated_chicks = seq(from = min(data_protos$scl_cumulated_chicks), to = max(data_protos$scl_cumulated_chicks), by = 0.1)), exclude = c("s(farm)","s(year)")) #population effect prediction
 
 #we got the predictions, but need to unscale the explanatory variable "cumulated_chics" (=host availability)
-p_nestdays_protos <- p_nestdays_protos %>%  
-  mutate(cumulated_chicks = scl_cumulated_chicks * sd(data_protos$cumulated_chicks) + mean(data_protos$cumulated_chicks)) %>% select(-c(year, farm))
+p_nestdays_protos <- p_nestdays_protos |>  
+  mutate(cumulated_chicks = scl_cumulated_chicks * sd(data_protos$cumulated_chicks) + mean(data_protos$cumulated_chicks)) |> select(-c(year, farm))
 ```
 
 #### Prediction plot
@@ -369,9 +369,9 @@ We need the nestling-days values as predicted by hatching date to predict the va
 p_ind_hatchdate_protos <- predictions(m_protos, 
                          newdata = datagrid(
                            scl_cumulated_chicks = (p_hatchdate_nestdays$estimate - mean(data_protos$cumulated_chicks)) / sd(data_protos$cumulated_chicks)), 
-                         exclude = c("s(farm)","s(year)")) %>%
+                         exclude = c("s(farm)","s(year)")) |>
   # unscale cumulated chicks                       
-  mutate(cumulated_chicks = scl_cumulated_chicks*sd(data_protos$cumulated_chicks) + mean(data_protos$cumulated_chicks)) %>% 
+  mutate(cumulated_chicks = scl_cumulated_chicks*sd(data_protos$cumulated_chicks) + mean(data_protos$cumulated_chicks)) |> 
   # Add unscaled hatch_date from the prediction grid
   left_join(p_hatchdate_nestdays |> 
                select(estimate, hatch_date) |>
@@ -381,7 +381,7 @@ p_ind_hatchdate_protos <- predictions(m_protos,
 ### Prediction plot
 
 ```{r}
-#| output: false
+#| warning: false
 COLS <- alpha(colorRampPalette(c("seashell","tomato3"))(30),0.8)
 
 plot_ind_hatchdate_protos <- plot_nestdays_protos + 
@@ -428,3 +428,184 @@ fig_2
 ```
 
 # Case 2 - Indirect effect of hatch date on *Protocalliphora* abundance through temperature
+## DAG
+
+```{r}
+DAG_3 <- create_dag_plot(
+  labels = c("Hatching date", "Temperature", "Abundance")
+) +
+  xlim(0.05, 1.4) +
+  theme(plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt"))
+
+print(DAG_3)
+```
+
+## Model
+The only model missing for this analysis is Temperature ~ Hatching date
+
+### Temperature ~ Hatching date (Mediator ~ Exposure)
+
+```{r}
+#| include: false
+m_temp <- readRDS("m_temp.rds")
+```
+
+
+```{r}
+#| eval: false
+m_temp <- glmmTMB(mean_t_protos ~ timing_clutch + (1|year/farm), family = lognormal, data = data_protos)
+```
+
+#### Predictions
+
+```{r}
+#| include: false
+pred_temp <- readRDS("pred_temp.rds")
+```
+```{r}
+#| eval: false
+pred_temp <- predictions(m_temp, 
+                         newdata = datagrid(timing_clutch = seq(from = min(data_protos$timing_clutch), to = max(data_protos$timing_clutch), length.out = 3000)), 
+                         re.form = NA)
+```
+
+#### Prediction Plot
+
+```{r}
+plot_hatchdate_temp <- ggplot(data = pred_temp) +
+  geom_line(aes(y = estimate, x = timing_clutch), linewidth = 1.5, lineend = "round" ) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, x = timing_clutch), alpha = 0.05) +
+  theme_classic() +
+  geom_segment(y= min(pred_temp$estimate),
+                                   x = 0, xend= min(pred_temp$timing_clutch), linetype= "dashed") +
+  geom_segment(y=max(pred_temp$estimate), x = 0, xend= max(pred_temp$timing_clutch), linetype= "dashed") +
+  labs(title = NULL,
+       y = "Temperature (°C)",
+       x = "Hatching date")+
+    theme(axis.line.y = element_line(arrow = arrow(
+                                               length = unit(0.15, "inches"),
+                                               ends = "last", 
+                                               type = "closed"),
+                                   linewidth = 1.5,
+                                   color = "aquamarine4"),
+        axis.line.x = element_line(arrow = arrow(
+                                               length = unit(0.15, "inches"),
+                                               ends = "last", 
+                                               type = "closed"),
+                                   linewidth = 1.5,
+                                   color = "tomato4"),
+        axis.ticks = element_blank(),
+        axis.title.x = element_text(color = "tomato4", size = 16, face = "bold", family = "", lineheight = 1.5),
+        axis.title.y = element_text(color = "aquamarine4", size = 16, face = "bold", family = "", lineheight = 1.5),
+        axis.text.x = element_text(face = "bold", size = 14),
+        axis.text.y = element_text(face = "bold", size = 14)) +
+    scale_x_continuous(breaks = seq(140, 190, by = 15)) +
+    scale_y_continuous(breaks = seq(17, 21, by =2)) +
+    coord_cartesian(xlim = c(140, 195))
+
+print(plot_hatchdate_temp)
+```
+
+## *Protocalliphora* abundance ~ Temperature (Outcome ~ Mediator)
+### Predictions
+
+```{r}
+#| include: false
+pred_protos_t <- readRDS("pred_protos_t.rds")
+```
+
+```{r}
+pred_protos_t <- predictions(m_protos, 
+                         newdata = datagrid(
+                           scl_mean_t_protos = seq(from = min(data_protos$scl_mean_t_protos), to = max(data_protos$scl_mean_t_protos), length.out = 40)), 
+                         exclude = c("s(farm)","s(year)")) |>
+  mutate(mean_t_protos = scl_mean_t_protos*sd(data_protos$mean_t_protos) + mean(data_protos$mean_t_protos)) # unscale temp
+```
+
+### Prediction plot
+
+```{r}
+plot_abund_temp <- ggplot(data = pred_protos_t) +
+  geom_ribbon(aes(ymin = conf.low, ymax = conf.high, x = mean_t_protos), alpha = 0.05) +
+  geom_line(aes(y = estimate, x = mean_t_protos), linewidth = 1.5) +
+  labs(title = "",
+    y = "Abundance",
+       x = "Temperature (°C)") +
+  theme_classic() +
+    theme(axis.line.y = element_line(arrow = arrow(
+                                               length = unit(0.15, "inches"),
+                                               ends = "last", 
+                                               type = "closed"),
+                                   linewidth = 1.5,
+                                   color = "dodgerblue1"),
+        axis.line.x = element_line(arrow = arrow(
+                                               length = unit(0.15, "inches"),
+                                               ends = "last", 
+                                               type = "closed"),
+                                   linewidth = 1.5,
+                                   color = "aquamarine4"),
+        axis.ticks = element_blank(),
+        axis.title.x = element_text(color = "aquamarine4", size = 16, face = "bold", family = "", lineheight = 1.5),
+        axis.title.y = element_text(color = "dodgerblue1", size = 16, face = "bold", family = "", lineheight = 1.5),
+        axis.text.x = element_text(face = "bold", size = 14),
+        axis.text.y = element_text(face = "bold", size = 14))
+plot_abund_temp
+```
+
+## Indirect effect
+### Predictions
+```{r}
+pred_protos_pt <- predictions(m_protos, 
+                         newdata = datagrid(
+                           scl_mean_t_protos = (pred_temp$estimate - mean(data_protos$mean_t_protos)) / sd(data_protos$mean_t_protos)), 
+                         # scale predicted temp
+                         exclude = c("s(farm)","s(year)")) |>
+  mutate(mean_t_protos = scl_mean_t_protos*sd(data_protos$mean_t_protos) + mean(data_protos$mean_t_protos)) |> # unscale
+  mutate(timing_clutch = pred_temp$timing_clutch) # Add unscaled timing clutch
+```
+
+### Plot
+
+```{r}
+plot_ind_hatchdate_temp <-  plot_abund_temp +  geom_line(data = pred_protos_pt, 
+            aes(y = estimate, x = mean_t_protos, color = timing_clutch, 
+                linewidth = timing_clutch), lineend = "round") + 
+  geom_segment(x=min(pred_protos_pt$mean_t_protos), y=0, yend= min(pred_protos_pt$estimate), linetype= "dashed") +
+  geom_segment(x=max(pred_protos_pt$mean_t_protos), y=0, yend=max(pred_protos_pt$estimate), linetype= "dashed") +
+  labs(y = "Abundance", title = "", color = "Hatching date") + 
+  scale_color_gradientn(colours = COLS) +
+  guides(linewidth = "none", color = guide_colorbar(title.position = "top", title.hjust = 0.5)) +
+  theme(legend.position = "inside",
+  legend.key.size = unit(1.1, "cm"),
+        legend.position.inside = c(0.35, 0.8),
+        legend.direction = "horizontal",
+        legend.text = element_text(color = "tomato4", size = 12, face = "bold", family = "", lineheight = 1.5),
+        legend.title = element_text(color = "tomato4",size = 16, face = "bold", family = "", lineheight = 1.5),
+        legend.title.position = "top") + 
+  scale_y_continuous(breaks = seq(10,30, by = 10))
+
+plot_ind_hatchdate_temp
+```
+
+## Publication Figure 3
+
+```{r}
+#| fig-width: 9
+#| fig-height: 8
+# Create right column with B and C stacked
+right_col_top_3 <- plot_hatchdate_proto /  plot_hatchdate_temp
+
+# Create layout: DAG on left, right column on right for rows 1-2
+top_section_3 <- (DAG_3 | right_col_top_3) + plot_layout(widths = c(1, 1))
+
+# Row 3 has two plots side by side
+row3_3 <- plot_abund_temp + plot_ind_hatchdate_temp + plot_layout(widths = c(0.7, 1))
+
+# Combine all
+fig_3 <- top_section_3 / row3_3 + 
+  plot_layout(heights = c(2, 1)) +
+  plot_annotation(tag_levels = 'A') &
+  theme(plot.tag = element_text(size = 16, face = "bold"))
+
+fig_3
+```

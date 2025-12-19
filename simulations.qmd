@@ -331,8 +331,8 @@ head(pred_O_EM)
 Now, we need the values of E that were associated with the predicted values of M
 
 ```{r}
-pred_O_ME <- pred_O_EM %>%
-  select(-c(E)) %>% #remove E; it's set to its mean as we don't need it
+pred_O_ME <- pred_O_EM |>
+  select(-c(E)) |> #remove E; it's set to its mean as we don't need it
   mutate(E = pred_M_E$E)
 
 head(pred_O_ME)
