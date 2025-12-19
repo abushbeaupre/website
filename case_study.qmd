@@ -2,6 +2,174 @@
 title: "Case Study - *Protocalliphora* abundance in Tree Swallow nests"
 ---
 
-## Case Study
+Here, we display how to use the visualization method of indirect effects using a real-world example from Coroller-Chouraki et al. (2026) LINK. While the authors examined the effects of several putative causes of the abundance of *Protocalliphora* spp. in the nests of Tree Swallows breeding along a gradient of agricultural intensity, they focused on direct effects and neglected to formally quantify or visualize hypothesized indirect effects. Here, we apply our novel visualization procedure to two indirect effects linked to the reproductive timing of swallows and included in the DAG on which the aforementioned study was based. More details about the hypothesized causal links in the system and theoretical explanations for the indirect effects visualized here can be found in Coroller-Chouraki et al. (2026) and Bush-Beaupré et al. (2026) LINK.
 
-Content for case study to be added.
+The data for the case study can be downloaded [here](https://doi.org/10.5281/zenodo.17980480)
+
+# Set up workspace
+## Load packages
+
+```{r}
+#| output: false
+library(tidyverse)       # data manipulation and plotting
+library(readxl)          # read excel files
+library(glmmTMB)         # frequentist GLMMs
+library(marginaleffects) # marginal predictions
+library(patchwork)       # multiple plots
+library(mgcv)            # GAMMs
+```
+
+## DAG plotting function
+
+```{r}
+#' Create a DAG plot with rounded boxes and arrows
+#'
+#' @param labels Character vector of length 3 with names for Exposure, Mediator, Outcome
+#' @param arrow_labels Character vector of length 4 with labels for paths B, C, D, E (default: c("B", "C", "D", "E"))
+#' @param box_colors Character vector of length 3 with hex colors for boxes (default: c("tomato4", "#2E8B57", "#1E90FF"))
+#' @param arrow_color Color for arrows (default: "#0F6670")
+#' @return A ggplot object
+create_dag_plot <- function(labels = c("Exposure", "Mediator", "Outcome"),
+                           arrow_labels = c("B", "C", "D", "E"),
+                           box_colors = c("tomato4", "#2E8B57", "#1E90FF"),
+                           arrow_color = "#0F6670") {
+  
+  # Path diagram (DAG) — rounded boxes + arrows
+  # boxes: name, center x/y, width, height, border colour
+  # Using wider coordinate system (0-1.4 for x) to create rectangular plot
+  boxes <- data.frame(
+    name = labels,
+    x = c(0.7, 0.25, 1.15),
+    y = c(0.8, 0.4, 0.4),
+    width = c(0.7, 0.6, 0.6),
+    height = c(0.14, 0.18, 0.18),
+    col = box_colors,
+    stringsAsFactors = FALSE
+  )
+  
+  # arrow head style
+  arr_closed <- grid::arrow(length = unit(0.22, "inches"), type = "closed")
+  arr_open <- grid::arrow(length = unit(0.22, "inches"), type = "open")
+  
+  # Draw arrows FIRST so they appear behind boxes
+  p <- ggplot() + xlim(0.2, 1.4) + ylim(0.2, 0.9) + 
+    # B: Exposure -> Outcome (right, curved)
+    geom_curve(aes(x = 0.81, y = 0.74, xend = 1.15, yend = 0.5), 
+               curvature = -0.28, color = arrow_color, size = 1.4, arrow = arr_closed) +
+    # C: Exposure -> Mediator (left, curved)
+    geom_curve(aes(x = 0.59, y = 0.74, xend = 0.25, yend = 0.5), 
+               curvature = 0.28, color = arrow_color, size = 1.4, arrow = arr_closed) +
+    # D: Mediator -> Outcome (bottom, long curve)
+    geom_curve(aes(x = 0.25, y = 0.31, xend = 1.15, yend = 0.3), 
+               curvature = 0.32, color = arrow_color, size = 1.4, arrow = arr_closed) +
+    # E: dashed indirect (Exposure -> Outcome via dashed curved line)
+    geom_curve(aes(x = 0.62, y = 0.765, xend = 0.84, yend = 0.41), 
+               curvature = 1.5, color = "slategray3", size = 1.2,  arrow = arr_closed)
+  
+  # Now draw boxes on top of arrows
+  for(i in seq_len(nrow(boxes))){
+    bx <- boxes[i,]
+    xmin <- bx$x - bx$width/2
+    xmax <- bx$x + bx$width/2
+    ymin <- bx$y - bx$height/2
+    ymax <- bx$y + bx$height/2
+    
+    # draw a rounded rectangle as a grob and place it with annotation_custom
+    rr <- grid::roundrectGrob(r = unit(0.2, "snpc"),
+            gp = grid::gpar(fill = "white", col = bx$col, lwd = 6))
+    p <- p + annotation_custom(rr, xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax) +
+      annotate("text", x = bx$x, y = bx$y, label = bx$name, 
+               fontface = "bold", size = 5.5, colour = bx$col)
+  }
+  
+  # Add labels for arrows on top
+  p <- p +
+    annotate("text", x = 1.00, y = 0.62, label = arrow_labels[1], size = 6, fontface = "bold") +
+    annotate("text", x = 0.40, y = 0.62, label = arrow_labels[2], size = 6, fontface = "bold") +
+    annotate("text", x = 0.70, y = 0.27, label = arrow_labels[3], size = 6, fontface = "bold") +
+    annotate("text", x = 0.2, y = 0.7, label = arrow_labels[4], size = 6, fontface = "bold") +
+    coord_cartesian(clip = "off") +
+    theme_void()
+  
+  return(p)
+}
+```
+
+## Data
+
+```{r}
+data_protos <- read_excel("data_indirecteffects.xlsx") %>% 
+  # scale the data (except comp1 comp2 as it was already centered between 0)
+  mutate( scl_cumulated_chicks = as.vector(scale(cumulated_chicks)),
+          scl_a1j1_p = as.vector(scale(a1j1_p)),
+          scl_a1j1_t = as.vector(scale(a1j1_t)),
+          scl_mean_t_protos = as.vector(scale(mean_t_protos)),
+          scl_mean_p_protos = as.vector(scale(mean_p_protos)),
+          scl_mean_t_bird = as.vector(scale(mean_t_bird)),
+          scl_mean_p_bird = as.vector(scale(mean_p_bird)),
+          scl_timing_clutch = as.vector(scale(timing_clutch)),
+          year = as.factor(year), 
+          farm = as.factor(farm),
+          agemom = as.factor(agemom)) 
+
+glimpse(data_protos)
+```
+
+### Metadata
+idcouvee — Unique identifier for each clutch (nesting attempt). [anonymized]
+
+farm — Farm or study site where the nest box is located. [anonymized]
+
+nichoir — Nest box identifier within a given farm. [anonymized]
+
+year — Year in which the breeding attempt occurred.
+
+n_protos — Number of *Protocalliphora* spp. puparia (pupal cases) found in the nest at the end of the breeding season; used as a proxy of ectoparasite abundance.
+
+cumulated_chicks — Proxy for host availability for *Protocalliphora* larvae, calculated as the number of chicks multiplied by the number of days they remained in the nest.
+
+mean_t_bird — Mean air temperature (°C) during the period corresponding to the nestling stage of the host chicks.
+ 		(From hatching to fledging or demise)
+
+mean_p_bird — Mean precipitation (mm) during the period corresponding to the nestling stage of the host chicks.
+		(From hatching to fledging or demise)
+
+mean_t_protos — Mean air temperature (°C) during the time window relevant for *Protocalliphora* larvae development
+ 		(the same window as for chicks +7 days).
+
+mean_p_protos — Mean precipitation (mm) during the time window relevant for *Protocalliphora* larvae development
+ 		(the same window as for chicks +7 days).
+
+a1j1_t — Cumulative sum of hourly degrees above 5 °C between April 1 and June 1 (thermal accumulation, proxy for early-season temperature conditions).
+
+a1j1_p — Cumulative sum of hourly precipitation between April 1 and June 1 (proxy for early-season moisture conditions).
+
+timing_clutch — Day of the year corresponding to the hatching date of the first chick in the clutch (proxy for breeding phenology).
+
+comp1 — First component from the rPCA describing agricultural landscape composition.
+ 	Positively correlated with maize and soybean cover. Negatively correlated with forage and tree cover.
+ 	Explains ~79% of the variance in habitat composition.
+
+comp2 — Second component from the rPCA describing agricultural landscape composition.
+ 	Positively correlated with tree cover. Negatively correlated with forage cover.
+ 	Explains ~17% of the variance in habitat composition.
+
+agemom — Age class of the Tree Swallow mother for the given clutch (2nd year = young adult; After 2nd year = older adult).
+
+# Case 1 - Indirect affect of hatch date on *Protocalliphora* abundance through nestling-days
+
+## DAG
+
+```{r}
+#| code-fold: true
+#| warning: false
+#| fig-width: 6
+#| fig-height: 7
+DAG_2 <- create_dag_plot(
+  labels = c("Hatching date", "Nestling-days", "Abundance")
+) +
+  xlim(0.05, 1.4) +
+  theme(plot.margin = margin(t = 10, r = 10, b = 10, l = 10, unit = "pt"))
+  
+print(DAG_2)
+```
